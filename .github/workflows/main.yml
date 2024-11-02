@@ -1,0 +1,91 @@
+name: Arkari ollvm
+
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+   
+jobs:
+ 
+ windows:
+    name: Build for Windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+         fetch-depth: 1
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+         msystem: UCRT64
+         update: true
+         install: make diffutils unzip gzip cmake ninja git zip gcc zstd clang
+         pacboy: 7zip:p python:p cmake:p gcc:p ninja:p zstd:p clang:p lld:p
+
+      - name: Build toolchain
+        run: |
+         mkdir build
+         cd build
+         cmake -G "Ninja" -DLLVM_ENABLE_PROJECTS="clang;lld" -DCMAKE_BUILD_TYPE=Release -DLLVM_INCLUDE_TESTS=OFF -DLLVM_ENABLE_NEW_PASS_MANAGER=TRUE -DCMAKE_EXE_LINKER_FLAGS="-static"  ../llvm
+         ninja -j20
+         
+
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        with:
+          name: ollvm-windows
+          path: build\bin\*
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        if: ${{ github.event_name == 'release' }}
+        with:
+          files: build\bin\*
+
+ linux:
+
+     
+      name: Build for Linux
+      runs-on: ubuntu-20.04
+
+      
+      steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+              fetch-depth: 1
+          
+      - name: Set up Python 3
+        uses: actions/setup-python@v5
+        with:
+             python-version: "3.x"
+
+      - name: Build toolchain
+        run: |
+              sudo apt-get -y install cmake ninja-build libzstd-dev binutils-dev gcc git python3 golang zip unzip make zstd
+              mkdir linux-build
+              cd linux-build
+              cmake -G "Ninja" -DLLVM_ENABLE_PROJECTS="clang;lld" -DCMAKE_BUILD_TYPE=Release -DLLVM_INCLUDE_TESTS=OFF -DLLVM_ENABLE_NEW_PASS_MANAGER=TRUE -DCMAKE_EXE_LINKER_FLAGS="-static" ../llvm
+              ninja -j16
+
+
+      - name: Upload linux build artifact
+        uses: actions/upload-artifact@v4
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        with:
+          name: ollvm-linux
+          path: linux-build/bin/*
+
+      - name: Upload linux release assets
+        uses: softprops/action-gh-release@v2
+        if: ${{ github.event_name == 'release' }}
+        with:
+          files: linux-build\bin\*
